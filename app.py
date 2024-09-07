@@ -16,7 +16,7 @@ class RSSItem(BaseModel):
 
 
 allowed_origins = [
-    "http://127.0.0.1:8000",
+    "http://localhost:5173",
     "https://cybersec-feed-frontend.onrender.com",
 ]
 
