@@ -2,6 +2,7 @@ from fastapi import FastAPI
 import feedparser
 from pydantic import BaseModel
 from typing import List
+import uvicorn
 
 app = FastAPI()
 
@@ -38,5 +39,4 @@ def get_rss_feeds():
     return all_items
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, port=8000)
+    uvicorn.run(app, port=8000,reload=True)
