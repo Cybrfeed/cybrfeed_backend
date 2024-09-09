@@ -14,7 +14,7 @@ class RSSItem(BaseModel):
     description: str
     published: str
 
-
+# temporary though should be changed afterwards
 allowed_origins = [
     "http://localhost:5173",
     "https://cybersec-feed-frontend.onrender.com",
