@@ -6,6 +6,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 import random
+import os
 
 app = Flask(__name__)
 
@@ -85,4 +86,6 @@ def get_classified_data():
     return jsonify(classified_data)
 
 if __name__ == "__main__":
-    app.run(port=8000)
+    # Use the PORT environment variable set by Render or default to 8000
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
