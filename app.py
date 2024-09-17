@@ -1,39 +1,13 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
-import feedparser
+from flask import Flask, jsonify
 import requests
-import pandas as pd
-import numpy as np
+from bs4 import BeautifulSoup
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from sklearn.pipeline import Pipeline
+import random
 
-app = FastAPI()
-
-# Define CORS allowed origins
-allowed_origins = [
-    "http://localhost:5173",
-    "https://cybersec-feed-frontend.onrender.com",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class RSSItem(BaseModel):
-    title: str
-    link: str
-    description: str
-    published: str
+app = Flask(__name__)
 
 # Define the RSS feed URLs
 rss_urls = [
@@ -43,16 +17,17 @@ rss_urls = [
 ]
 
 # Function to parse RSS feeds
-def parse_rss_feed(url: str) -> List[RSSItem]:
-    feed = feedparser.parse(url)
+def parse_rss_feed(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, features="xml")
     items = []
-    for entry in feed.entries:
-        item = RSSItem(
-            title=entry.get("title", "No title"),
-            link=entry.get("link", "No link"),
-            description=entry.get("description", "No description"),
-            published=entry.get("published", "No date"),
-        )
+    for entry in soup.find_all('item'):
+        item = {
+            'title': entry.title.text if entry.title else "No title",
+            'link': entry.link.text if entry.link else "No link",
+            'description': entry.description.text if entry.description else "No description",
+            'published': entry.pubDate.text if entry.pubDate else "No date"
+        }
         items.append(item)
     return items
 
@@ -63,49 +38,51 @@ def fetch_and_prepare_data():
         items = parse_rss_feed(url)
         all_items.extend(items)
     
-    df = pd.DataFrame([item.dict() for item in all_items])
-    df = df[['title', 'description']]
-    
-    # Dummy labels for demonstration (replace with real labels in practice)
-    labels = np.random.randint(0, 3, size=len(df))
-    df['label'] = labels
-    
-    return df
+    return all_items
 
-# Prepare the classification model
-df = fetch_and_prepare_data()
-X_train, X_test, y_train, y_test = train_test_split(df[['title', 'description']], df['label'], test_size=0.2, random_state=42)
+# Dummy dataset creation for the model training (random labels for demonstration)
+def create_dummy_data(items):
+    texts = [item['title'] + ' ' + item['description'] for item in items]
+    labels = [random.choice([0, 1, 2]) for _ in range(len(items))]  # 0: green, 1: orange, 2: red
+    return texts, labels
 
-pipeline = Pipeline([
-    ('tfidf', TfidfVectorizer(stop_words='english')),
-    ('clf', RandomForestClassifier(n_estimators=100))
-])
+# Train the model
+def train_model(texts, labels):
+    X_train, X_test, y_train, y_test = train_test_split(texts, labels, test_size=0.2, random_state=42)
 
-pipeline.fit(X_train['title'] + ' ' + X_train['description'], y_train)
-y_pred = pipeline.predict(X_test['title'] + ' ' + X_test['description'])
-print(classification_report(y_test, y_pred, target_names=['green', 'orange', 'red']))
+    pipeline = Pipeline([
+        ('tfidf', TfidfVectorizer(stop_words='english')),
+        ('clf', RandomForestClassifier(n_estimators=100))
+    ])
 
-# Classify a new article
-def classify_article(title, description):
+    pipeline.fit(X_train, y_train)
+    return pipeline
+
+# Function to classify a new article
+def classify_article(model, title, description):
     text = title + ' ' + description
-    prediction = pipeline.predict([text])[0]
+    prediction = model.predict([text])[0]
     return prediction
 
-@app.get("/feed.json")
+# Fetch and classify the data
+@app.route("/feed.json", methods=["GET"])
 def get_classified_data():
+    data = fetch_and_prepare_data()
+    texts, labels = create_dummy_data(data)  # Using dummy labels for demonstration
+    model = train_model(texts, labels)  # Train the ML model
+
     classified_data = []
-    for _, row in df.iterrows():
-        title = row['title']
-        description = row['description']
-        label = classify_article(title, description)
+    for item in data:
+        title = item['title']
+        description = item['description']
+        label = classify_article(model, title, description)
         classified_data.append({
             'title': title,
             'description': description,
             'critical_level': ['green', 'orange', 'red'][label]
         })
     
-    return JSONResponse(content=classified_data)
+    return jsonify(classified_data)
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, port=8000)
+    app.run(port=8000)
